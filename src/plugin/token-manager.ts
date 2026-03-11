@@ -9,10 +9,11 @@
  * - Promise tracking to avoid concurrent refreshes
  */
 
-import { loadCredentials, saveCredentials } from './auth.js';
+import { loadCredentials, saveCredentials, getCredentialsPath } from './auth.js';
 import { refreshAccessToken } from '../qwen/oauth.js';
 import type { QwenCredentials } from '../types.js';
 import { createDebugLogger } from '../utils/debug-logger.js';
+import { FileLock } from '../utils/file-lock.js';
 
 const debugLogger = createDebugLogger('TOKEN_MANAGER');
 const TOKEN_REFRESH_BUFFER_MS = 30 * 1000; // 30 seconds
@@ -51,8 +52,8 @@ class TokenManager {
           return fromFile;
         }
 
-        // Need to perform actual refresh via API
-        return await this.performTokenRefresh(fromFile);
+        // Need to perform actual refresh via API (with file locking for multi-process safety)
+        return await this.performTokenRefreshWithLock(fromFile);
       })();
       
       try {
@@ -103,6 +104,55 @@ class TokenManager {
       debugLogger.error('Token refresh failed:', error);
       return null;
     }
+  }
+
+  /**
+   * Perform token refresh with file locking (multi-process safe)
+   */
+  private async performTokenRefreshWithLock(current: QwenCredentials | null): Promise<QwenCredentials | null> {
+    const credPath = getCredentialsPath();
+    const lock = new FileLock(credPath);
+
+    // Try to acquire lock (wait up to 5 seconds)
+    const lockAcquired = await lock.acquire(5000, 100);
+
+    if (!lockAcquired) {
+      // Another process is doing refresh, wait and reload from file
+      debugLogger.info('Another process is refreshing, waiting...');
+      await this.delay(600); // Wait for other process to finish
+      
+      // Reload credentials from file (should have new token now)
+      const reloaded = loadCredentials();
+      if (reloaded && this.isTokenValid(reloaded)) {
+        this.memoryCache = reloaded;
+        debugLogger.info('Loaded refreshed credentials from file');
+        return reloaded;
+      }
+      
+      // Still invalid, try again without lock (edge case)
+      return await this.performTokenRefresh(current);
+    }
+
+    try {
+      // Critical section: only one process executes here
+      // Double-check if another process already refreshed while we were waiting for lock
+      const fromFile = loadCredentials();
+      if (fromFile && this.isTokenValid(fromFile)) {
+        debugLogger.info('Credentials already refreshed by another process');
+        this.memoryCache = fromFile;
+        return fromFile;
+      }
+
+      // Perform the actual refresh
+      return await this.performTokenRefresh(current);
+    } finally {
+      // Always release lock, even if error occurs
+      lock.release();
+    }
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**
