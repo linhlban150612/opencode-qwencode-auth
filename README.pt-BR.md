@@ -25,6 +25,9 @@
 - 🎯 **Correção de Rate Limit** - Headers oficiais previnem rate limiting agressivo (Fix #4)
 - 🔍 **Session Tracking** - IDs únicos de sessão/prompt para reconhecimento de cota
 - 🎯 **Alinhado com qwen-code** - Expõe os mesmos modelos do Qwen Code CLI oficial
+- ⏱️ **Throttling de Requisições** - Intervalos de 1-2.5s entre requisições (previne limite de 60 req/min)
+- 🔄 **Retry Automático** - Backoff exponencial com jitter para erros 429/5xx (até 7 tentativas)
+- 📡 **Suporte a Retry-After** - Respeita header Retry-After do servidor quando rate limited
 
 ## 📋 Pré-requisitos
 

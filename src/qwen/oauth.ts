@@ -10,6 +10,7 @@ import { randomBytes, createHash, randomUUID } from 'node:crypto';
 import { QWEN_OAUTH_CONFIG } from '../constants.js';
 import type { QwenCredentials } from '../types.js';
 import { QwenAuthError, logTechnicalDetail } from '../errors.js';
+import { retryWithBackoff, getErrorStatus } from '../utils/retry.js';
 
 /**
  * Erro lançado quando o servidor pede slow_down (RFC 8628)
@@ -178,6 +179,7 @@ export function tokenResponseToCredentials(tokenResponse: TokenResponse): QwenCr
 
 /**
  * Refresh the access token using refresh_token grant
+ * Includes automatic retry for transient errors (429, 5xx)
  */
 export async function refreshAccessToken(refreshToken: string): Promise<QwenCredentials> {
   const bodyData = {
@@ -186,31 +188,55 @@ export async function refreshAccessToken(refreshToken: string): Promise<QwenCred
     client_id: QWEN_OAUTH_CONFIG.clientId,
   };
 
-  const response = await fetch(QWEN_OAUTH_CONFIG.tokenEndpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Accept: 'application/json',
+  return retryWithBackoff(
+    async () => {
+      const response = await fetch(QWEN_OAUTH_CONFIG.tokenEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+        body: objectToUrlEncoded(bodyData),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logTechnicalDetail(`Token refresh HTTP ${response.status}: ${errorText}`);
+        
+        // Don't retry on invalid_grant (refresh token expired/revoked)
+        if (errorText.includes('invalid_grant')) {
+          throw new QwenAuthError('invalid_grant', 'Refresh token expired or revoked');
+        }
+        
+        throw new QwenAuthError('refresh_failed', `HTTP ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json() as TokenResponse;
+
+      return {
+        accessToken: data.access_token,
+        tokenType: data.token_type || 'Bearer',
+        refreshToken: data.refresh_token || refreshToken,
+        resourceUrl: data.resource_url,
+        expiryDate: Date.now() + data.expires_in * 1000,
+        scope: data.scope,
+      };
     },
-    body: objectToUrlEncoded(bodyData),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    logTechnicalDetail(`Token refresh HTTP ${response.status}: ${errorText}`);
-    throw new QwenAuthError('refresh_failed', `HTTP ${response.status}: ${errorText}`);
-  }
-
-  const data = await response.json() as TokenResponse;
-
-  return {
-    accessToken: data.access_token,
-    tokenType: data.token_type || 'Bearer',
-    refreshToken: data.refresh_token || refreshToken,
-    resourceUrl: data.resource_url,
-    expiryDate: Date.now() + data.expires_in * 1000,
-    scope: data.scope,
-  };
+    {
+      maxAttempts: 5,
+      initialDelayMs: 1000,
+      maxDelayMs: 15000,
+      shouldRetryOnError: (error) => {
+        // Don't retry on invalid_grant errors
+        if (error.message.includes('invalid_grant')) {
+          return false;
+        }
+        // Retry on 429 or 5xx errors
+        const status = getErrorStatus(error);
+        return status === 429 || (status !== undefined && status >= 500 && status < 600);
+      },
+    }
+  );
 }
 
 /**

@@ -25,6 +25,9 @@
 - 🎯 **Rate Limit Fix** - Official headers prevent aggressive rate limiting (Fixes #4)
 - 🔍 **Session Tracking** - Unique session/prompt IDs for proper quota recognition
 - 🎯 **Aligned with qwen-code** - Exposes same models as official Qwen Code CLI
+- ⏱️ **Request Throttling** - 1-2.5s intervals between requests (prevents 60 req/min limit)
+- 🔄 **Automatic Retry** - Exponential backoff with jitter for 429/5xx errors (up to 7 attempts)
+- 📡 **Retry-After Support** - Respects server's Retry-After header when rate limited
 
 ## 🆕 What's New in v1.5.0
 
@@ -39,6 +42,21 @@
 - `X-Metadata` - Session and prompt tracking for quota recognition
 
 **Result:** Full daily quota now available without premature rate limiting.
+
+### Automatic Retry & Throttling (v1.5.0+)
+
+**Request Throttling:**
+- Minimum 1 second interval between requests
+- Additional 0.5-1.5s random jitter (more human-like)
+- Prevents hitting 60 req/min limit
+
+**Automatic Retry:**
+- Up to 7 retry attempts for transient errors
+- Exponential backoff with +/- 30% jitter
+- Respects `Retry-After` header from server
+- Retries on 429 (rate limit) and 5xx (server errors)
+
+**Result:** Smoother request flow and automatic recovery from rate limiting.
 
 ### Dynamic API Endpoint Resolution
 

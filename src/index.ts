@@ -12,6 +12,7 @@ import { spawn } from 'node:child_process';
 
 import { QWEN_PROVIDER_ID, QWEN_API_CONFIG, QWEN_MODELS, QWEN_OFFICIAL_HEADERS } from './constants.js';
 import type { QwenCredentials } from './types.js';
+import type { HttpError } from './utils/retry.js';
 import { saveCredentials, loadCredentials, resolveBaseUrl } from './plugin/auth.js';
 import {
   generatePKCE,
@@ -22,9 +23,14 @@ import {
   SlowDownError,
 } from './qwen/oauth.js';
 import { logTechnicalDetail } from './errors.js';
+import { retryWithBackoff } from './utils/retry.js';
+import { RequestQueue } from './plugin/request-queue.js';
 
 // Global session ID for the plugin lifetime
 const PLUGIN_SESSION_ID = crypto.randomUUID();
+
+// Singleton request queue for throttling (shared across all requests)
+const requestQueue = new RequestQueue();
 
 // ============================================
 // Helpers
@@ -108,7 +114,48 @@ export const QwenAuthPlugin = async (_input: unknown) => {
               promptId: crypto.randomUUID(),
               source: 'opencode-qwencode-auth'
             })
-          }
+          },
+          // Custom fetch with throttling and retry
+          fetch: async (url: string, options?: RequestInit) => {
+            return requestQueue.enqueue(async () => {
+              return retryWithBackoff(
+                async () => {
+                  // Generate new promptId for each request
+                  const headers = new Headers(options?.headers);
+                  headers.set('Authorization', `Bearer ${accessToken}`);
+                  headers.set(
+                    'X-Metadata',
+                    JSON.stringify({
+                      sessionId: PLUGIN_SESSION_ID,
+                      promptId: crypto.randomUUID(),
+                      source: 'opencode-qwencode-auth',
+                    })
+                  );
+
+                  const response = await fetch(url, {
+                    ...options,
+                    headers,
+                  });
+
+                  if (!response.ok) {
+                    const errorText = await response.text().catch(() => '');
+                    const error = new Error(`HTTP ${response.status}: ${errorText}`) as HttpError & { status?: number };
+                    error.status = response.status;
+                    (error as any).response = response;
+                    throw error;
+                  }
+
+                  return response;
+                },
+                {
+                  authType: 'qwen-oauth',
+                  maxAttempts: 7,
+                  initialDelayMs: 1500,
+                  maxDelayMs: 30000,
+                }
+              );
+            });
+          },
         };
       },
 
