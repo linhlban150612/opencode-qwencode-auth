@@ -5,8 +5,9 @@
  */
 
 import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { existsSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { existsSync, writeFileSync, mkdirSync, readFileSync, renameSync, unlinkSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 
 import type { QwenCredentials } from '../types.js';
 import { QWEN_API_CONFIG } from '../constants.js';
@@ -74,10 +75,11 @@ export function resolveBaseUrl(resourceUrl?: string): string {
 
 /**
  * Save credentials to file in qwen-code compatible format
+ * Uses atomic write (temp file + rename) to prevent corruption
  */
 export function saveCredentials(credentials: QwenCredentials): void {
   const credPath = getCredentialsPath();
-  const dir = join(homedir(), '.qwen');
+  const dir = dirname(credPath);
 
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
@@ -93,5 +95,19 @@ export function saveCredentials(credentials: QwenCredentials): void {
     scope: credentials.scope,
   };
 
-  writeFileSync(credPath, JSON.stringify(data, null, 2));
+  // ATOMIC WRITE: temp file + rename to prevent corruption
+  const tempPath = `${credPath}.tmp.${randomUUID()}`;
+  
+  try {
+    writeFileSync(tempPath, JSON.stringify(data, null, 2));
+    renameSync(tempPath, credPath); // Atomic on POSIX systems
+  } catch (error) {
+    // Cleanup temp file if rename fails
+    try {
+      if (existsSync(tempPath)) {
+        unlinkSync(tempPath);
+      }
+    } catch {}
+    throw error;
+  }
 }
