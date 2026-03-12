@@ -161,13 +161,28 @@ export const QwenAuthPlugin = async (_input: unknown) => {
                 // Reactive recovery for 401 (token expired mid-session)
                 if (response.status === 401 && authRetryCount < 1) {
                   authRetryCount++;
-                  debugLogger.warn('401 Unauthorized detected. Forcing token refresh...');
+                  debugLogger.warn('401 Unauthorized detected. Forcing token refresh...', {
+                    url: url.substring(0, 100) + (url.length > 100 ? '...' : ''),
+                    attempt: authRetryCount,
+                    maxRetries: 1
+                  });
                   
                   // Force refresh from API
+                  const refreshStart = Date.now();
                   const refreshed = await tokenManager.getValidCredentials(true);
+                  const refreshElapsed = Date.now() - refreshStart;
+                  
                   if (refreshed?.accessToken) {
-                    debugLogger.info('Token refreshed, retrying request...');
+                    debugLogger.info('Token refreshed successfully, retrying request...', {
+                      refreshElapsed,
+                      newTokenExpiry: refreshed.expiryDate ? new Date(refreshed.expiryDate).toISOString() : 'N/A'
+                    });
                     return executeRequest(); // Recursive retry with new token
+                  } else {
+                    debugLogger.error('Failed to refresh token after 401', {
+                      refreshElapsed,
+                      hasRefreshToken: !!refreshed?.accessToken
+                    });
                   }
                 }
 
@@ -176,6 +191,16 @@ export const QwenAuthPlugin = async (_input: unknown) => {
                   const errorText = await response.text().catch(() => '');
                   const error: any = new Error(`HTTP ${response.status}: ${errorText}`);
                   error.status = response.status;
+                  
+                  // Add context for debugging
+                  debugLogger.error('Request failed', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    url: url.substring(0, 100) + (url.length > 100 ? '...' : ''),
+                    method: options?.method || 'GET',
+                    errorText: errorText.substring(0, 200) + (errorText.length > 200 ? '...' : '')
+                  });
+                  
                   throw error;
                 }
 

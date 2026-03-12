@@ -154,7 +154,14 @@ class TokenManager {
       
       return refreshed;
     } catch (error) {
-      debugLogger.error('Token refresh failed', error);
+      const elapsed = Date.now() - startTime;
+      debugLogger.error('Token refresh failed', {
+        error: error instanceof Error ? error.message : String(error),
+        elapsed,
+        hasRefreshToken: !!current?.refreshToken,
+        refreshTokenPreview: current?.refreshToken ? current.refreshToken.substring(0, 10) + '...' : 'N/A',
+        stack: error instanceof Error ? error.stack?.split('\n').slice(0, 3).join('\n') : undefined
+      });
       throw error; // Re-throw so caller knows it failed
     }
   }
@@ -178,14 +185,18 @@ class TokenManager {
 
     if (!lockAcquired) {
       // Another process is doing refresh, wait and reload from file
-      debugLogger.info('Another process is refreshing, waiting...');
+      debugLogger.info('Another process is refreshing, waiting...', {
+        lockTimeout: 5000,
+        waitTime: 600
+      });
       await this.delay(600); // Wait for other process to finish
       
       // Reload credentials from file (should have new token now)
       const reloaded = loadCredentials();
       debugLogger.info('Reloaded credentials after wait', {
         hasCredentials: !!reloaded,
-        valid: reloaded ? this.isTokenValid(reloaded) : 'N/A'
+        valid: reloaded ? this.isTokenValid(reloaded) : 'N/A',
+        totalWaitTime: Date.now() - lockStart
       });
       
       if (reloaded && this.isTokenValid(reloaded)) {
@@ -195,7 +206,9 @@ class TokenManager {
       }
       
       // Still invalid, try again without lock (edge case: other process failed)
-      debugLogger.warn('Fallback: attempting refresh without lock');
+      debugLogger.warn('Fallback: attempting refresh without lock', {
+        reason: 'Lock acquisition failed, assuming other process crashed'
+      });
       return await this.performTokenRefresh(current);
     }
 
@@ -204,24 +217,34 @@ class TokenManager {
       
       // Double-check: another process may have refreshed while we were waiting for lock
       const fromFile = loadCredentials();
+      const doubleCheckElapsed = Date.now() - lockStart;
       debugLogger.info('Double-check after lock acquisition', {
         hasFile: !!fromFile,
-        fileValid: fromFile ? this.isTokenValid(fromFile) : 'N/A'
+        fileValid: fromFile ? this.isTokenValid(fromFile) : 'N/A',
+        elapsed: doubleCheckElapsed
       });
       
       if (fromFile && this.isTokenValid(fromFile)) {
-        debugLogger.info('Credentials already refreshed by another process');
+        debugLogger.info('Credentials already refreshed by another process', {
+          timeSinceLockStart: doubleCheckElapsed,
+          usingFileCredentials: true
+        });
         this.memoryCache = fromFile;
         return fromFile;
       }
 
       // Perform the actual refresh
-      debugLogger.info('Performing refresh in critical section');
+      debugLogger.info('Performing refresh in critical section', {
+        hasRefreshToken: !!fromFile?.refreshToken,
+        elapsed: doubleCheckElapsed
+      });
       return await this.performTokenRefresh(fromFile);
     } finally {
       // Always release lock, even if error occurs
       lock.release();
-      debugLogger.info('File lock released');
+      debugLogger.info('File lock released', {
+        totalOperationTime: Date.now() - lockStart
+      });
     }
   }
 
