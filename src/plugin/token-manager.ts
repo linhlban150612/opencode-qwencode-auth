@@ -21,8 +21,16 @@ const debugLogger = createDebugLogger('TOKEN_MANAGER');
 const TOKEN_REFRESH_BUFFER_MS = 30 * 1000; // 30 seconds
 const CACHE_CHECK_INTERVAL_MS = 5000; // 5 seconds (matches official client)
 
+interface CacheState {
+  credentials: QwenCredentials | null;
+  lastCheck: number;
+}
+
 class TokenManager {
-  private memoryCache: QwenCredentials | null = null;
+  private memoryCache: CacheState = {
+    credentials: null,
+    lastCheck: 0,
+  };
   private refreshPromise: Promise<QwenCredentials | null> | null = null;
   private lastFileCheck = 0;
 
@@ -38,12 +46,12 @@ class TokenManager {
 
     try {
       // 1. Check in-memory cache first (unless force refresh)
-      if (!forceRefresh && this.memoryCache && this.isTokenValid(this.memoryCache)) {
+      if (!forceRefresh && this.memoryCache.credentials && this.isTokenValid(this.memoryCache.credentials)) {
         debugLogger.info('Returning from memory cache', {
           age: Date.now() - startTime,
-          validUntil: new Date(this.memoryCache.expiryDate!).toISOString()
+          validUntil: new Date(this.memoryCache.credentials.expiryDate!).toISOString()
         });
-        return this.memoryCache;
+        return this.memoryCache.credentials;
       }
 
       // 2. If concurrent refresh is already happening, wait for it
@@ -83,13 +91,13 @@ class TokenManager {
           });
           
           // Use memory cache if available
-          fromFile = this.memoryCache;
+          fromFile = this.memoryCache.credentials;
         }
 
         // If not forcing refresh and file has valid credentials, use them
         if (!forceRefresh && fromFile && this.isTokenValid(fromFile)) {
           debugLogger.info('Using valid credentials from file');
-          this.memoryCache = fromFile;
+          this.updateCacheState(fromFile, now);
           return fromFile;
         }
 
@@ -112,6 +120,23 @@ class TokenManager {
       debugLogger.error('Failed to get valid credentials', error);
       return null;
     }
+  }
+
+  /**
+   * Update cache state atomically
+   * Ensures all cache fields are updated together to prevent inconsistent states
+   * Matches official client's updateCacheState() pattern
+   */
+  private updateCacheState(credentials: QwenCredentials | null, lastCheck?: number): void {
+    this.memoryCache = {
+      credentials,
+      lastCheck: lastCheck ?? Date.now(),
+    };
+    
+    debugLogger.debug('Cache state updated', {
+      hasCredentials: !!credentials,
+      lastCheck,
+    });
   }
 
   /**
@@ -168,8 +193,8 @@ class TokenManager {
       saveCredentials(refreshed);
       debugLogger.info('Credentials saved to file');
       
-      // Update cache
-      this.memoryCache = refreshed;
+      // Update cache atomically
+      this.updateCacheState(refreshed);
       debugLogger.info('Token refreshed successfully');
       
       return refreshed;
@@ -220,7 +245,7 @@ class TokenManager {
       });
       
       if (reloaded && this.isTokenValid(reloaded)) {
-        this.memoryCache = reloaded;
+        this.updateCacheState(reloaded);
         debugLogger.info('Loaded refreshed credentials from file (multi-process)');
         return reloaded;
       }
@@ -249,7 +274,7 @@ class TokenManager {
           timeSinceLockStart: doubleCheckElapsed,
           usingFileCredentials: true
         });
-        this.memoryCache = fromFile;
+        this.updateCacheState(fromFile);
         return fromFile;
       }
 
@@ -280,8 +305,8 @@ class TokenManager {
   } {
     const fromFile = loadCredentials();
     return {
-      hasMemoryCache: !!this.memoryCache,
-      memoryCacheValid: this.memoryCache ? this.isTokenValid(this.memoryCache) : false,
+      hasMemoryCache: !!this.memoryCache.credentials,
+      memoryCacheValid: this.memoryCache.credentials ? this.isTokenValid(this.memoryCache.credentials) : false,
       hasRefreshPromise: !!this.refreshPromise,
       fileExists: !!fromFile,
       fileValid: fromFile ? this.isTokenValid(fromFile) : false
@@ -297,7 +322,7 @@ class TokenManager {
    */
   clearCache(): void {
     debugLogger.info('Cache cleared');
-    this.memoryCache = null;
+    this.updateCacheState(null);
   }
 
   /**
@@ -309,7 +334,7 @@ class TokenManager {
       hasRefreshToken: !!credentials.refreshToken,
       expiryDate: credentials.expiryDate ? new Date(credentials.expiryDate).toISOString() : 'N/A'
     });
-    this.memoryCache = credentials;
+    this.updateCacheState(credentials);
     saveCredentials(credentials);
   }
 }

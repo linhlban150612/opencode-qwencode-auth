@@ -48,6 +48,13 @@ export class FileLock {
       cleanup();
       throw err; // Re-throw after cleanup
     });
+    process.on('unhandledRejection', (reason, promise) => {
+      cleanup();
+      debugLogger.error('Unhandled Rejection detected', {
+        reason: reason instanceof Error ? reason.message : String(reason),
+        promise: promise.constructor.name
+      });
+    });
 
     this.cleanupRegistered = true;
   }
@@ -70,16 +77,27 @@ export class FileLock {
         // Check for stale lock before attempting to acquire
         if (existsSync(this.lockPath)) {
           try {
-            const stats = statSync(this.lockPath);
+            // Wrap stat in timeout to prevent hangs (3 second timeout, matches official client)
+            const stats = await this.withTimeout(
+              Promise.resolve(statSync(this.lockPath)),
+              3000,
+              'Lock file stat',
+            );
             const lockAge = Date.now() - stats.mtimeMs;
             
             if (lockAge > STALE_THRESHOLD_MS) {
               debugLogger.warn(`Removing stale lock (age: ${lockAge}ms)`);
-              unlinkSync(this.lockPath);
+              // Wrap unlink in timeout as well
+              await this.withTimeout(
+                Promise.resolve(unlinkSync(this.lockPath)),
+                3000,
+                'Stale lock removal',
+              );
               // Continue to acquire the lock
             }
           } catch (statError) {
             // Lock may have been removed by another process, continue
+            debugLogger.debug('Stale lock check failed, continuing', statError);
           }
         }
 
@@ -147,5 +165,36 @@ export class FileLock {
 
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Wrap a promise with a timeout
+   * Prevents file operations from hanging indefinitely
+   * Matches official client's withTimeout() pattern
+   */
+  private withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    operationType = 'File operation',
+  ): Promise<T> {
+    let timeoutId: NodeJS.Timeout | undefined;
+
+    return Promise.race([
+      promise.finally(() => {
+        // Clear timeout when main promise completes (success or failure)
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () =>
+            reject(
+              new Error(`${operationType} timed out after ${timeoutMs}ms`),
+            ),
+          timeoutMs,
+        );
+      }),
+    ]);
   }
 }
