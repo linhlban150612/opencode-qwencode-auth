@@ -83,8 +83,19 @@ export function loadCredentials(): QwenCredentials | null {
     const content = readFileSync(credPath, 'utf8');
     const data = JSON.parse(content);
     
-    // Validate credentials structure (matches official client's validation)
-    const validated = validateCredentials(data);
+    // Convert snake_case (file format) to camelCase (internal format)
+    // This matches qwen-code format for compatibility
+    const converted: QwenCredentials = {
+      accessToken: data.access_token,
+      tokenType: data.token_type || 'Bearer',
+      refreshToken: data.refresh_token,
+      resourceUrl: data.resource_url,
+      expiryDate: data.expiry_date,
+      scope: data.scope,
+    };
+    
+    // Validate converted credentials structure
+    const validated = validateCredentials(converted);
     
     return validated;
   } catch (error) {
