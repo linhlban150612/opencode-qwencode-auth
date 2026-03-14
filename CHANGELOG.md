@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.5.0] - 2026-03-12
+## [1.5.0] - 2026-03-14 (Updated)
 
 ### 🚨 Critical Fixes
 
@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Headers include `X-DashScope-CacheControl`, `X-DashScope-AuthType`, `X-DashScope-UserAgent`
   - Requests now recognized as legitimate Qwen Code client
   - Full 1,000 requests/day quota now available (OAuth free tier)
+- **HTTP 401 handling in device polling** - Added explicit error handling for HTTP 401 during device authorization polling
+  - Attaches HTTP status code to errors for proper classification
+  - User-friendly error message: "Device code expired or invalid. Please restart authentication."
+- **Token refresh response validation** - Validates access_token presence in refresh response before accepting
+- **Refresh token security** - Removed refresh token from console logs to prevent credential leakage
 
 ### 🔧 Production Hardening
 
@@ -37,18 +42,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added request throttling (1s min interval + random jitter) to prevent hitting 60 req/min limits
   - Implemented `retryWithBackoff` with exponential backoff and jitter (up to 7 attempts)
   - Added support for `Retry-After` header from server
+  - OAuth requests now use 30s timeout to prevent indefinite hangs
 
 ### ✨ New Features
 
 - **Dynamic API endpoint resolution** - Automatic region detection based on `resource_url` in OAuth token
 - **Aligned with qwen-code-0.12.1** - Achieved 98% feature parity with official client
 - **Enhanced Debug Logging** - Detailed context, timing, and state information (enabled via `OPENCODE_QWEN_DEBUG=1`)
+- **Custom error hierarchy** - `QwenAuthError`, `CredentialsClearRequiredError`, `TokenManagerError` with error classification
+- **Error classification system** - `classifyError()` helper for programmatic error handling with retry hints
+
+### 🧪 Testing Infrastructure
+
+- **Comprehensive test suite** - 104 unit tests across 6 test files with 197 assertions
+  - `errors.test.ts` - Error handling and classification tests (30+ tests)
+  - `oauth.test.ts` - OAuth device flow and PKCE tests (20+ tests)
+  - `file-lock.test.ts` - File locking and concurrency tests (20 tests)
+  - `token-manager.test.ts` - Token caching and refresh tests (10 tests)
+  - `request-queue.test.ts` - Request throttling tests (15+ tests)
+  - `auth-integration.test.ts` - End-to-end integration tests (15 tests)
+- **Integration tests** - Manual test scripts for race conditions and end-to-end debugging
+- **Robust stress tests** - Multi-process concurrency tests with 10 parallel workers
+- **Test isolation** - `QWEN_TEST_CREDS_PATH` environment variable prevents tests from modifying user credentials
+- **Test configuration** - `bunfig.toml` for test runner configuration
+- **Test documentation** - `tests/README.md` with complete testing guide
 
 ### 📚 Documentation
 
-- User-focused README cleanup
+- User-focused README cleanup (English and Portuguese)
 - Updated troubleshooting section with practical recovery steps
-- Added detailed CHANGELOG for technical history
+- Detailed CHANGELOG for technical history
+- Test suite documentation with commands and examples
+- Architecture documentation in code comments
 
 ---
 
