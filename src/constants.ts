@@ -35,38 +35,9 @@ export const QWEN_API_CONFIG = {
 export const CALLBACK_PORT = 14561;
 
 // Available Qwen models through OAuth (portal.qwen.ai)
-// Testados e confirmados funcionando via token OAuth
+// Aligned with qwen-code-0.12.0 official client - only coder-model is exposed
 export const QWEN_MODELS = {
-  // --- Coding Models ---
-  'qwen3.5-plus': {
-    id: 'qwen3.5-plus',
-    name: 'Qwen 3.5 Plus',
-    contextWindow: 1048576, // 1M tokens
-    maxOutput: 65536, // 64K tokens
-    description: 'Latest and most capable Qwen 3.5 coding model with 1M context window',
-    reasoning: true,
-    capabilities: { vision: true },
-    cost: { input: 0, output: 0 }, // Free via OAuth
-  },
-  'qwen3-coder-plus': {
-    id: 'qwen3-coder-plus',
-    name: 'Qwen3 Coder Plus',
-    contextWindow: 1048576, // 1M tokens
-    maxOutput: 65536, // 64K tokens
-    description: 'Most capable Qwen 3.0 coding model with 1M context window',
-    reasoning: false,
-    cost: { input: 0, output: 0 },
-  },
-  'qwen3-coder-flash': {
-    id: 'qwen3-coder-flash',
-    name: 'Qwen3 Coder Flash',
-    contextWindow: 1048576,
-    maxOutput: 65536,
-    description: 'Faster Qwen coding model for quick responses',
-    reasoning: false,
-    cost: { input: 0, output: 0 },
-  },
-  // --- Alias Models (portal mapeia internamente) ---
+  // --- Active Model (matches qwen-code-0.12.0) ---
   'coder-model': {
     id: 'coder-model',
     name: 'Qwen Coder (auto)',
@@ -77,16 +48,44 @@ export const QWEN_MODELS = {
     capabilities: { vision: true },
     cost: { input: 0, output: 0 },
   },
-  // --- Vision Model ---
-  'vision-model': {
-    id: 'vision-model',
-    name: 'Qwen VL Plus (vision)',
-    contextWindow: 131072, // 128K tokens
-    maxOutput: 32768, // 32K tokens
-    description: 'Vision-language model (maps to qwen3-vl-plus), supports image input',
-    reasoning: false,
-    cost: { input: 0, output: 0 },
-  },
+  // --- Commented out: Not exposed by qwen-code-0.12.0 official client ---
+  // 'qwen3.5-plus': {
+  //   id: 'qwen3.5-plus',
+  //   name: 'Qwen 3.5 Plus',
+  //   contextWindow: 1048576,
+  //   maxOutput: 65536,
+  //   description: 'Latest and most capable Qwen 3.5 coding model with 1M context window',
+  //   reasoning: true,
+  //   capabilities: { vision: true },
+  //   cost: { input: 0, output: 0 },
+  // },
+  // 'qwen3-coder-plus': {
+  //   id: 'qwen3-coder-plus',
+  //   name: 'Qwen3 Coder Plus',
+  //   contextWindow: 1048576,
+  //   maxOutput: 65536,
+  //   description: 'Most capable Qwen 3.0 coding model with 1M context window',
+  //   reasoning: false,
+  //   cost: { input: 0, output: 0 },
+  // },
+  // 'qwen3-coder-flash': {
+  //   id: 'qwen3-coder-flash',
+  //   name: 'Qwen3 Coder Flash',
+  //   contextWindow: 1048576,
+  //   maxOutput: 65536,
+  //   description: 'Faster Qwen coding model for quick responses',
+  //   reasoning: false,
+  //   cost: { input: 0, output: 0 },
+  // },
+  // 'vision-model': {
+  //   id: 'vision-model',
+  //   name: 'Qwen VL Plus (vision)',
+  //   contextWindow: 131072,
+  //   maxOutput: 32768,
+  //   description: 'Vision-language model (maps to qwen3-vl-plus), supports image input',
+  //   reasoning: false,
+  //   cost: { input: 0, output: 0 },
+  // },
 } as const;
 
 // Official Qwen Code CLI Headers for performance and quota recognition

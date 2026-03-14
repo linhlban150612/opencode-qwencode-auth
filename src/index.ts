@@ -9,22 +9,30 @@
  */
 
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 
 import { QWEN_PROVIDER_ID, QWEN_API_CONFIG, QWEN_MODELS, QWEN_OFFICIAL_HEADERS } from './constants.js';
 import type { QwenCredentials } from './types.js';
-import { saveCredentials, loadCredentials, resolveBaseUrl } from './plugin/auth.js';
+import { resolveBaseUrl } from './plugin/auth.js';
 import {
   generatePKCE,
   requestDeviceAuthorization,
   pollDeviceToken,
   tokenResponseToCredentials,
-  refreshAccessToken,
   SlowDownError,
 } from './qwen/oauth.js';
-import { logTechnicalDetail } from './errors.js';
+import { retryWithBackoff, getErrorStatus } from './utils/retry.js';
+import { RequestQueue } from './plugin/request-queue.js';
+import { tokenManager } from './plugin/token-manager.js';
+import { createDebugLogger } from './utils/debug-logger.js';
+
+const debugLogger = createDebugLogger('PLUGIN');
 
 // Global session ID for the plugin lifetime
-const PLUGIN_SESSION_ID = crypto.randomUUID();
+const PLUGIN_SESSION_ID = randomUUID();
+
+// Singleton request queue for throttling (shared across all requests)
+const requestQueue = new RequestQueue();
 
 // ============================================
 // Helpers
@@ -38,36 +46,38 @@ function openBrowser(url: string): void {
     const child = spawn(command, args, { stdio: 'ignore', detached: true });
     child.unref?.();
   } catch {
-    // Ignore errors
+    // Fallback: show URL in stderr
+    console.error('\n[Qwen Auth] Unable to open browser automatically.');
+    console.error('Please open this URL manually to authenticate:\n');
+    console.error(`  ${url}\n`);
   }
 }
 
-/** Obtem um access token valido (com refresh se necessario) */
-async function getValidAccessToken(
-  getAuth: () => Promise<{ type: string; access?: string; refresh?: string; expires?: number }>,
-): Promise<string | null> {
-  const auth = await getAuth();
+/**
+ * Check if error is authentication-related (401, 403, token expired)
+ * Mirrors official client's isAuthError logic
+ */
+function isAuthError(error: unknown): boolean {
+  if (!error) return false;
 
-  if (!auth || auth.type !== 'oauth') {
-    return null;
-  }
+  const errorMessage = error instanceof Error
+    ? error.message.toLowerCase()
+    : String(error).toLowerCase();
 
-  let accessToken = auth.access;
+  const status = getErrorStatus(error);
 
-  // Refresh se expirado (com margem de 60s)
-  if (accessToken && auth.expires && Date.now() > auth.expires - 60_000 && auth.refresh) {
-    try {
-      const refreshed = await refreshAccessToken(auth.refresh);
-      accessToken = refreshed.accessToken;
-      saveCredentials(refreshed);
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      logTechnicalDetail(`Token refresh falhou: ${detail}`);
-      accessToken = undefined;
-    }
-  }
-
-  return accessToken ?? null;
+  return (
+    status === 401 ||
+    status === 403 ||
+    errorMessage.includes('unauthorized') ||
+    errorMessage.includes('forbidden') ||
+    errorMessage.includes('invalid access token') ||
+    errorMessage.includes('invalid api key') ||
+    errorMessage.includes('token expired') ||
+    errorMessage.includes('authentication') ||
+    errorMessage.includes('access denied') ||
+    (errorMessage.includes('token') && errorMessage.includes('expired'))
+  );
 }
 
 // ============================================
@@ -80,7 +90,7 @@ export const QwenAuthPlugin = async (_input: unknown) => {
       provider: QWEN_PROVIDER_ID,
 
       loader: async (
-        getAuth: () => Promise<{ type: string; access?: string; refresh?: string; expires?: number }>,
+        getAuth: any,
         provider: { models?: Record<string, { cost?: { input: number; output: number } }> },
       ) => {
         // Zerar custo dos modelos (gratuito via OAuth)
@@ -90,24 +100,127 @@ export const QwenAuthPlugin = async (_input: unknown) => {
           }
         }
 
-        const accessToken = await getValidAccessToken(getAuth);
-        if (!accessToken) return null;
+        // Get latest valid credentials
+        const credentials = await tokenManager.getValidCredentials();
+        if (!credentials?.accessToken) return null;
 
-        // Load credentials to resolve region-specific base URL
-        const creds = loadCredentials();
-        const baseURL = resolveBaseUrl(creds?.resource_url);
+        const baseURL = resolveBaseUrl(credentials.resourceUrl);
 
         return {
-          apiKey: accessToken,
+          apiKey: credentials.accessToken,
           baseURL: baseURL,
           headers: {
             ...QWEN_OFFICIAL_HEADERS,
-            // Custom metadata object required by official backend for free quota
-            'X-Metadata': JSON.stringify({
-              sessionId: PLUGIN_SESSION_ID,
-              promptId: crypto.randomUUID(),
-              source: 'opencode-qwencode-auth'
-            })
+          },
+          // Custom fetch with throttling, retry and 401 recovery
+          fetch: async (url: string, options: any = {}) => {
+            return requestQueue.enqueue(async () => {
+              let authRetryCount = 0;
+
+              const executeRequest = async (): Promise<Response> => {
+                // Get latest token (possibly refreshed by concurrent request)
+                const currentCreds = await tokenManager.getValidCredentials();
+                const token = currentCreds?.accessToken;
+                
+                if (!token) throw new Error('No access token available');
+
+                // Prepare merged headers
+                const mergedHeaders: Record<string, string> = {
+                  ...QWEN_OFFICIAL_HEADERS,
+                };
+
+                // Merge provided headers (handles both plain object and Headers instance)
+                if (options.headers) {
+                  if (typeof (options.headers as any).entries === 'function') {
+                    for (const [k, v] of (options.headers as any).entries()) {
+                      const kl = k.toLowerCase();
+                      if (!kl.startsWith('x-dashscope') && kl !== 'user-agent' && kl !== 'authorization') {
+                        mergedHeaders[k] = v;
+                      }
+                    }
+                  } else {
+                    for (const [k, v] of Object.entries(options.headers)) {
+                      const kl = k.toLowerCase();
+                      if (!kl.startsWith('x-dashscope') && kl !== 'user-agent' && kl !== 'authorization') {
+                        mergedHeaders[k] = v as string;
+                      }
+                    }
+                  }
+                }
+
+                // Force our Authorization token
+                mergedHeaders['Authorization'] = `Bearer ${token}`;
+
+                // Optional: X-Metadata might be expected by some endpoints for free quota tracking
+                // but let's try without it first to match official client closer
+                // mergedHeaders['X-Metadata'] = JSON.stringify({ ... });
+
+                // Perform the request
+                const response = await fetch(url, {
+                  ...options,
+                  headers: mergedHeaders
+                });
+
+                // Reactive recovery for 401 (token expired mid-session)
+                if (response.status === 401 && authRetryCount < 1) {
+                  authRetryCount++;
+                  debugLogger.warn('401 Unauthorized detected. Forcing token refresh...', {
+                    url: url.substring(0, 100) + (url.length > 100 ? '...' : ''),
+                    attempt: authRetryCount,
+                    maxRetries: 1
+                  });
+                  
+                  // Force refresh from API
+                  const refreshStart = Date.now();
+                  const refreshed = await tokenManager.getValidCredentials(true);
+                  const refreshElapsed = Date.now() - refreshStart;
+                  
+                  if (refreshed?.accessToken) {
+                    debugLogger.info('Token refreshed successfully, retrying request...', {
+                      refreshElapsed,
+                      newTokenExpiry: refreshed.expiryDate ? new Date(refreshed.expiryDate).toISOString() : 'N/A'
+                    });
+                    return executeRequest(); // Recursive retry with new token
+                  } else {
+                    debugLogger.error('Failed to refresh token after 401', {
+                      refreshElapsed,
+                      hasRefreshToken: !!refreshed?.accessToken
+                    });
+                  }
+                }
+
+                // Error handling for retryWithBackoff
+                if (!response.ok) {
+                  const errorText = await response.text().catch(() => '');
+                  const error: any = new Error(`HTTP ${response.status}: ${errorText}`);
+                  error.status = response.status;
+                  
+                  // Add context for debugging
+                  debugLogger.error('Request failed', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    url: url.substring(0, 100) + (url.length > 100 ? '...' : ''),
+                    method: options?.method || 'GET',
+                    errorText: errorText.substring(0, 200) + (errorText.length > 200 ? '...' : '')
+                  });
+                  
+                  throw error;
+                }
+
+                return response;
+              };
+
+              // Use official retry logic for 429/5xx errors
+              return retryWithBackoff(() => executeRequest(), {
+                authType: 'qwen-oauth',
+                maxAttempts: 7,
+                shouldRetryOnError: (error: any) => {
+                  const status = error.status || getErrorStatus(error);
+                  // Retry on 401 (handled by executeRequest recursion too), 429, and 5xx
+                  return status === 401 || status === 429 || (status !== undefined && status >= 500 && status < 600);
+                }
+              });
+            });
           }
         };
       },
@@ -142,7 +255,7 @@ export const QwenAuthPlugin = async (_input: unknown) => {
 
                       if (tokenResponse) {
                         const credentials = tokenResponseToCredentials(tokenResponse);
-                        saveCredentials(credentials);
+                        tokenManager.setCredentials(credentials);
 
                         return {
                           type: 'success' as const,

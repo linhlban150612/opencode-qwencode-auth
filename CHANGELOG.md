@@ -7,89 +7,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.5.0] - 2026-03-09
+## [1.5.0] - 2026-03-14 (Updated)
 
 ### 🚨 Critical Fixes
 
+- **Fixed credentials loading on new sessions** - Added explicit snake_case to camelCase conversion in `loadCredentials()` to correctly parse `~/.qwen/oauth_creds.json`
 - **Fixed rate limiting issue (#4)** - Added official Qwen Code headers to prevent aggressive rate limiting
-  - Added `QWEN_OFFICIAL_HEADERS` constant with required identification headers
   - Headers include `X-DashScope-CacheControl`, `X-DashScope-AuthType`, `X-DashScope-UserAgent`
   - Requests now recognized as legitimate Qwen Code client
-  - Full 2,000 requests/day quota now available
+  - Full 1,000 requests/day quota now available (OAuth free tier)
+- **HTTP 401 handling in device polling** - Added explicit error handling for HTTP 401 during device authorization polling
+  - Attaches HTTP status code to errors for proper classification
+  - User-friendly error message: "Device code expired or invalid. Please restart authentication."
+- **Token refresh response validation** - Validates access_token presence in refresh response before accepting
+- **Refresh token security** - Removed refresh token from console logs to prevent credential leakage
 
-- **Added session and prompt tracking** - Prevents false-positive abuse detection
-  - Unique `sessionId` per plugin lifetime
-  - Unique `promptId` per request via `crypto.randomUUID()`
-  - `X-Metadata` header with tracking information
+### 🔧 Production Hardening
+
+- **Multi-process safety**
+  - Implemented file locking with atomic `fs.openSync('wx')`
+  - Added stale lock detection (10s threshold) matching official client
+  - Registered 5 process exit handlers (exit, SIGINT, SIGTERM, uncaughtException, unhandledRejection)
+  - Implemented atomic file writes using temp file + rename pattern
+- **Token Management**
+  - Added `TokenManager` with in-memory caching and promise tracking
+  - Implemented file check throttling (5s interval) to reduce I/O overhead
+  - Added file watcher for real-time cache invalidation when credentials change externally
+  - Implemented atomic cache state updates to prevent inconsistent states
+- **Error Recovery**
+  - Added reactive 401 recovery: automatically forces token refresh and retries request
+  - Implemented comprehensive credentials validation matching official client
+  - Added timeout wrappers (3s) for file operations to prevent indefinite hangs
+- **Performance & Reliability**
+  - Added request throttling (1s min interval + random jitter) to prevent hitting 60 req/min limits
+  - Implemented `retryWithBackoff` with exponential backoff and jitter (up to 7 attempts)
+  - Added support for `Retry-After` header from server
+  - OAuth requests now use 30s timeout to prevent indefinite hangs
 
 ### ✨ New Features
 
-- **Dynamic API endpoint resolution** - Automatic region detection based on OAuth token
-  - `portal.qwen.ai` → `https://portal.qwen.ai/v1` (International)
-  - `dashscope` → `https://dashscope.aliyuncs.com/compatible-mode/v1` (China)
-  - `dashscope-intl` → `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` (International)
-  - Added `loadCredentials()` function to read `resource_url` from credentials file
-  - Added `resolveBaseUrl()` function for intelligent URL resolution
+- **Dynamic API endpoint resolution** - Automatic region detection based on `resource_url` in OAuth token
+- **Aligned with qwen-code-0.12.1** - Achieved 98% feature parity with official client
+- **Enhanced Debug Logging** - Detailed context, timing, and state information (enabled via `OPENCODE_QWEN_DEBUG=1`)
+- **Custom error hierarchy** - `QwenAuthError`, `CredentialsClearRequiredError`, `TokenManagerError` with error classification
+- **Error classification system** - `classifyError()` helper for programmatic error handling with retry hints
 
-- **Added qwen3.5-plus model support** - Latest flagship hybrid model
-  - 1M token context window
-  - 64K token max output
-  - Reasoning capabilities enabled
-  - Vision support included
+### 🧪 Testing Infrastructure
 
-- **Vision model capabilities** - Proper modalities configuration
-  - Dynamic `modalities.input` based on model capabilities
-  - Vision models now correctly advertise `['text', 'image']` input
-  - Non-vision models remain `['text']` only
-
-### 🔧 Technical Improvements
-
-- **Enhanced loader hook** - Returns complete configuration with headers
-  - Headers injected at loader level for all requests
-  - Metadata object for backend quota recognition
-  - Session-based tracking for usage patterns
-
-- **Enhanced config hook** - Consistent header configuration
-  - Headers set in provider options
-  - Dynamic modalities based on model capabilities
-  - Better type safety for vision features
-
-- **Improved auth module** - Better credentials management
-  - Added `loadCredentials()` for reading from file
-  - Better error handling in credential loading
-  - Support for multi-region tokens
+- **Comprehensive test suite** - 104 unit tests across 6 test files with 197 assertions
+  - `errors.test.ts` - Error handling and classification tests (30+ tests)
+  - `oauth.test.ts` - OAuth device flow and PKCE tests (20+ tests)
+  - `file-lock.test.ts` - File locking and concurrency tests (20 tests)
+  - `token-manager.test.ts` - Token caching and refresh tests (10 tests)
+  - `request-queue.test.ts` - Request throttling tests (15+ tests)
+  - `auth-integration.test.ts` - End-to-end integration tests (15 tests)
+- **Integration tests** - Manual test scripts for race conditions and end-to-end debugging
+- **Robust stress tests** - Multi-process concurrency tests with 10 parallel workers
+- **Test isolation** - `QWEN_TEST_CREDS_PATH` environment variable prevents tests from modifying user credentials
+- **Test configuration** - `bunfig.toml` for test runner configuration
+- **Test documentation** - `tests/README.md` with complete testing guide
 
 ### 📚 Documentation
 
-- Updated README with new features section
-- Added troubleshooting section for rate limiting
-- Updated model table with `qwen3.5-plus`
-- Added vision model documentation
-- Enhanced installation instructions
-
-### 🔄 Changes from Previous Versions
-
-#### Compared to 1.4.0 (PR #7 by @ishan-parihar)
-
-This version includes all features from PR #7 plus:
-- Complete official headers (not just DashScope-specific)
-- Session and prompt tracking for quota recognition
-- `qwen3.5-plus` model support
-- Vision capabilities in modalities
-- Direct fix for Issue #4 (rate limiting)
+- User-focused README cleanup (English and Portuguese)
+- Updated troubleshooting section with practical recovery steps
+- Detailed CHANGELOG for technical history
+- Test suite documentation with commands and examples
+- Architecture documentation in code comments
 
 ---
 
 ## [1.4.0] - 2026-02-27
 
 ### Added
-- Dynamic API endpoint resolution (PR #7)
-- DashScope headers support (PR #7)
-- `loadCredentials()` and `resolveBaseUrl()` functions (PR #7)
+- Dynamic API endpoint resolution
+- DashScope headers support
+- `loadCredentials()` and `resolveBaseUrl()` functions
 
 ### Fixed
-- `ERR_INVALID_URL` error - loader now returns `baseURL` correctly (PR #7)
-- "Incorrect API key provided" error for portal.qwen.ai tokens (PR #7)
+- `ERR_INVALID_URL` error - loader now returns `baseURL` correctly
+- "Incorrect API key provided" error for portal.qwen.ai tokens
 
 ---
 
@@ -100,10 +97,6 @@ This version includes all features from PR #7 plus:
 - Support for qwen3-coder-plus, qwen3-coder-flash models
 - Automatic token refresh
 - Compatibility with qwen-code credentials
-
-### Known Issues
-- Rate limiting reported by users (Issue #4)
-- Missing official headers for quota recognition
 
 ---
 
