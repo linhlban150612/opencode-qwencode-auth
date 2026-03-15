@@ -1,8 +1,8 @@
 # 🤖 Qwen Code OAuth Plugin for OpenCode
 
 ![npm version](https://img.shields.io/npm/v/opencode-qwencode-auth)
-![License](https://img.shields.io/github/license/luanweslley77/opencode-qwencode-auth)
-![GitHub stars](https://img.shields.io/github/stars/luanweslley77/opencode-qwencode-auth)
+![License](https://img.shields.io/github/license/gustavodiasdev/opencode-qwencode-auth)
+![GitHub stars](https://img.shields.io/github/stars/gustavodiasdev/opencode-qwencode-auth)
 
 <p align="center">
   <img src="assets/screenshot.png" alt="OpenCode with Qwen Code" width="800">
@@ -125,7 +125,7 @@ OPENCODE_QWEN_DEBUG=1 opencode
 
 ```bash
 # Clone the repository
-git clone https://github.com/luanweslley77/opencode-qwencode-auth.git
+git clone https://github.com/gustavodiasdev/opencode-qwencode-auth.git
 cd opencode-qwencode-auth
 
 # Install dependencies
