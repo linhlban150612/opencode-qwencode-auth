@@ -8,90 +8,35 @@
   <img src="assets/screenshot.png" alt="OpenCode with Qwen Code" width="800">
 </p>
 
-**Authenticate OpenCode CLI with your qwen.ai account.** This plugin enables you to use Qwen models (Coder, Max, Plus and more) with **2,000 free requests per day** - no API key or credit card required!
+**Authenticate OpenCode CLI with your qwen.ai account.** This plugin enables you to use the `coder-model` with **1,000 free requests per day** - no API key or credit card required!
 
-[🇧🇷 Leia em Português](./README.pt-BR.md)
+[🇧🇷 Leia em Português](./README.pt-BR.md) | [📜 Changelog](./CHANGELOG.md)
 
 ## ✨ Features
 
 - 🔐 **OAuth Device Flow** - Secure browser-based authentication (RFC 8628)
-- ⚡ **Automatic Polling** - No need to press Enter after authorizing
-- 🆓 **2,000 req/day free** - Generous free tier with no credit card
-- 🧠 **1M context window** - 1 million token context
+- 🆓 **1,000 req/day free** - Free quota reset daily at midnight UTC
+- ⚡ **60 req/min** - Rate limit of 60 requests per minute
+- 🧠 **1M context window** - Massive context support for large projects
 - 🔄 **Auto-refresh** - Tokens renewed automatically before expiration
+- ⏱️ **Reliability** - Built-in request throttling and automatic retry for transient errors
 - 🔗 **qwen-code compatible** - Reuses credentials from `~/.qwen/oauth_creds.json`
-- 🌐 **Dynamic Routing** - Automatic resolution of API base URL based on region
-- 🏎️ **KV Cache Support** - Official DashScope headers for high performance
-- 🎯 **Rate Limit Fix** - Official headers prevent aggressive rate limiting (Fixes #4)
-- 🔍 **Session Tracking** - Unique session/prompt IDs for proper quota recognition
-- 🎯 **Aligned with qwen-code** - Exposes same models as official Qwen Code CLI
-- ⏱️ **Request Throttling** - 1-2.5s intervals between requests (prevents 60 req/min limit)
-- 🔄 **Automatic Retry** - Exponential backoff with jitter for 429/5xx errors (up to 7 attempts)
-- 📡 **Retry-After Support** - Respects server's Retry-After header when rate limited
-
-## 🆕 What's New in v1.5.0
-
-### Rate Limiting Fix (Issue #4)
-
-**Problem:** Users were experiencing aggressive rate limiting (2,000 req/day quota exhausted quickly).
-
-**Solution:** Added official Qwen Code headers that properly identify the client:
-- `X-DashScope-CacheControl: enable` - Enables KV cache optimization
-- `X-DashScope-AuthType: qwen-oauth` - Marks as OAuth authentication
-- `X-DashScope-UserAgent` - Identifies as official Qwen Code client
-- `X-Metadata` - Session and prompt tracking for quota recognition
-
-**Result:** Full daily quota now available without premature rate limiting.
-
-### Automatic Retry & Throttling (v1.5.0+)
-
-**Request Throttling:**
-- Minimum 1 second interval between requests
-- Additional 0.5-1.5s random jitter (more human-like)
-- Prevents hitting 60 req/min limit
-
-**Automatic Retry:**
-- Up to 7 retry attempts for transient errors
-- Exponential backoff with +/- 30% jitter
-- Respects `Retry-After` header from server
-- Retries on 429 (rate limit) and 5xx (server errors)
-
-**Result:** Smoother request flow and automatic recovery from rate limiting.
-
-### Dynamic API Endpoint Resolution
-
-The plugin now automatically detects and uses the correct API endpoint based on the `resource_url` returned by the OAuth server:
-
-| resource_url | API Endpoint | Region |
-|-------------|--------------|--------|
-| `portal.qwen.ai` | `https://portal.qwen.ai/v1` | International |
-| `dashscope` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | China |
-| `dashscope-intl` | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | International |
-
-This means the plugin works correctly regardless of which region your Qwen account is associated with.
-
-### Aligned with qwen-code-0.12.0
-
-- ✅ **coder-model** - Only model exposed (matches official Qwen Code CLI)
-- ✅ **Vision capabilities** - Supports image input
-- ✅ **Dynamic modalities** - Input modalities adapt based on model capabilities
-
-## 📋 Prerequisites
-
-- [OpenCode CLI](https://opencode.ai) installed
-- A [qwen.ai](https://chat.qwen.ai) account (free to create)
 
 ## 🚀 Installation
 
 ### 1. Install the plugin
 
 ```bash
+# Using npm
 cd ~/.config/opencode && npm install opencode-qwencode-auth
+
+# Using bun (recommended)
+cd ~/.config/opencode && bun add opencode-qwencode-auth
 ```
 
 ### 2. Enable the plugin
 
-Edit `~/.config/opencode/opencode.jsonc`:
+Edit `~/.config/opencode/opencode.json`:
 
 ```json
 {
@@ -99,9 +44,19 @@ Edit `~/.config/opencode/opencode.jsonc`:
 }
 ```
 
+## ⚠️ Limits & Quotas
+
+- **Rate Limit:** 60 requests per minute
+- **Daily Quota:** 1,000 requests per day (reset at midnight UTC)
+- **Web Search:** 200 requests/minute, 1,000/day (separate quota)
+
+> **Note:** These limits are set by the Qwen OAuth API and may change. For professional use with higher quotas, consider using a [DashScope API Key](https://dashscope.aliyun.com).
+
 ## 🔑 Usage
 
 ### 1. Login
+
+Run the following command to start the OAuth flow:
 
 ```bash
 opencode auth login
@@ -109,18 +64,15 @@ opencode auth login
 
 ### 2. Select Provider
 
-Choose **"Other"** and type `qwen-code`
+Choose **"Other"** and type `qwen-code`.
 
 ### 3. Authenticate
 
-Select **"Qwen Code (qwen.ai OAuth)"**
+Select **"Qwen Code (qwen.ai OAuth)"**.
 
-- A browser window will open for you to authorize
-- The plugin automatically detects when you complete authorization
-- No need to copy/paste codes or press Enter!
-
-> [!TIP]
-> In the OpenCode TUI (graphical interface), the **Qwen Code** provider appears automatically in the provider list.
+- A browser window will open for you to authorize.
+- The plugin automatically detects when you complete authorization.
+- **No need to copy/paste codes or press Enter!**
 
 ## 🎯 Available Models
 
@@ -128,9 +80,11 @@ Select **"Qwen Code (qwen.ai OAuth)"**
 
 | Model | Context | Max Output | Features |
 |-------|---------|------------|----------|
-| `coder-model` | 1M tokens | 64K tokens | Official alias (Auto-routes to Qwen 3.5 Plus - Hybrid & Vision) |
+| `coder-model` | 1M tokens | Up to 64K tokens¹ | Official alias (Auto-routes to Qwen 3.5 Plus - Hybrid & Vision) |
 
-> **Note:** This plugin aligns with the official `qwen-code-0.12.0` client, which exposes only the `coder-model` alias. This model automatically routes to the best available Qwen 3.5 Plus with hybrid reasoning and vision capabilities.
+> ¹ Actual max output may vary depending on the specific model `coder-model` routes to.
+
+> **Note:** This plugin aligns with the official `qwen-code` client. The `coder-model` alias automatically routes to the best available Qwen 3.5 Plus model with hybrid reasoning and vision capabilities.
 
 ### Using the model
 
@@ -138,58 +92,34 @@ Select **"Qwen Code (qwen.ai OAuth)"**
 opencode --provider qwen-code --model coder-model
 ```
 
-## ⚙️ How It Works
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   OpenCode CLI  │────▶│  qwen.ai OAuth   │────▶│  Qwen Models    │
-│                 │◀────│  (Device Flow)   │◀────│  API            │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-```
-
-1. **Device Flow (RFC 8628)**: Opens your browser to `chat.qwen.ai` for authentication
-2. **Automatic Polling**: Detects authorization completion automatically
-3. **Token Storage**: Saves credentials to `~/.qwen/oauth_creds.json`
-4. **Auto-refresh**: Renews tokens 30 seconds before expiration
-
-## 📊 Usage Limits
-
-| Plan | Rate Limit | Daily Limit |
-|------|------------|-------------|
-| Free (OAuth) | 60 req/min | 2,000 req/day |
-
-> [!NOTE]
-> Limits reset at midnight UTC. For higher limits, consider using an API key from [DashScope](https://dashscope.aliyun.com).
-
 ## 🔧 Troubleshooting
 
-### Token expired
+### "Invalid access token" or "Token expired"
 
-The plugin automatically renews tokens. If issues persist:
+The plugin usually handles refresh automatically. If you see this error immediately:
 
-```bash
-# Remove old credentials
-rm ~/.qwen/oauth_creds.json
-
-# Re-authenticate
-opencode auth login
-```
-
-### Provider not showing in `auth login`
-
-The `qwen-code` provider is added via plugin. In the `opencode auth login` command:
-
-1. Select **"Other"**
-2. Type `qwen-code`
+1.  **Re-authenticate:** Run `opencode auth login` again.
+2.  **Clear cache:** Delete the credentials file and login again:
+    ```bash
+    rm ~/.qwen/oauth_creds.json
+    opencode auth login
+    ```
 
 ### Rate limit exceeded (429 errors)
 
-**As of v1.5.0, this should no longer occur!** The plugin now sends official Qwen Code headers that properly identify your client and prevent aggressive rate limiting.
+If you hit the 60 req/min or 1,000 req/day limits:
+- **Rate limit (60/min):** Wait a few minutes before trying again
+- **Daily quota (1,000/day):** Wait until midnight UTC for the quota to reset
+- **Web Search (200/min, 1,000/day):** Separate quota for web search tool
+- Consider using a [DashScope API Key](https://dashscope.aliyun.com) for professional use with higher quotas
 
-If you still experience rate limiting:
-- Ensure you're using v1.5.0 or later: `npm update opencode-qwencode-auth`
-- Wait until midnight UTC for quota reset
-- Consider [DashScope API](https://dashscope.aliyun.com) for higher limits
+### Enable Debug Logs
+
+If something isn't working, you can see detailed logs by setting the debug environment variable:
+
+```bash
+OPENCODE_QWEN_DEBUG=1 opencode
+```
 
 ## 🛠️ Development
 
@@ -201,47 +131,20 @@ cd opencode-qwencode-auth
 # Install dependencies
 bun install
 
-# Type check
-bun run typecheck
+# Run tests
+bun run tests/debug.ts full
 ```
 
-### Local testing
-
-Edit `~/.config/opencode/package.json`:
-
-```json
-{
-  "dependencies": {
-    "opencode-qwencode-auth": "file:///absolute/path/to/opencode-qwencode-auth"
-  }
-}
-```
-
-Then reinstall:
-
-```bash
-cd ~/.config/opencode && npm install
-```
-
-## 📁 Project Structure
+### Project Structure
 
 ```
 src/
-├── constants.ts        # OAuth endpoints, models config
-├── types.ts            # TypeScript interfaces
-├── index.ts            # Main plugin entry point
-├── qwen/
-│   └── oauth.ts        # OAuth Device Flow + PKCE
-└── plugin/
-    ├── auth.ts         # Credentials management
-    └── utils.ts        # Helper utilities
+├── qwen/               # OAuth implementation
+├── plugin/             # Token management & caching
+├── utils/              # Retry, locking and logging utilities
+├── constants.ts        # Models and endpoints
+└── index.ts            # Plugin entry point
 ```
-
-## 🔗 Related Projects
-
-- [qwen-code](https://github.com/QwenLM/qwen-code) - Official Qwen coding CLI
-- [OpenCode](https://opencode.ai) - AI-powered CLI for development
-- [opencode-gemini-auth](https://github.com/jenslys/opencode-gemini-auth) - Similar plugin for Google Gemini
 
 ## 📄 License
 
