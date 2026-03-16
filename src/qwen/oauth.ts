@@ -160,18 +160,14 @@ export async function pollDeviceToken(
           throw new SlowDownError();
         }
 
-        const error = new Error(
+        throw new Error(
           `Token poll failed: ${errorData.error || 'Unknown error'} - ${errorData.error_description || responseText}`
         );
-        (error as Error & { status?: number }).status = response.status;
-        throw error;
       } catch (parseError) {
         if (parseError instanceof SyntaxError) {
-          const error = new Error(
+          throw new Error(
             `Token poll failed: ${response.status} ${response.statusText}. Response: ${responseText}`
           );
-          (error as Error & { status?: number }).status = response.status;
-          throw error;
         }
         throw parseError;
       }
@@ -321,8 +317,6 @@ export async function performDeviceAuthFlow(
       // Check if we should slow down
       if (error instanceof SlowDownError) {
         interval = Math.min(interval * 1.5, 10000); // Increase interval, max 10s
-      } else if ((error as Error & { status?: number }).status === 401) {
-        throw new Error('Device code expired or invalid. Please restart authentication.');
       } else {
         throw error;
       }
