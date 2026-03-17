@@ -24,23 +24,36 @@
 
 ## 🚀 Instalação
 
-### 1. Instale o plugin
-
-```bash
-# Usando npm
-cd ~/.config/opencode && npm install opencode-qwencode-auth
-
-# Usando bun (recomendado)
-cd ~/.config/opencode && bun add opencode-qwencode-auth
-```
-
-### 2. Habilite o plugin
-
 Edite `~/.config/opencode/opencode.json`:
 
 ```json
 {
   "plugin": ["opencode-qwencode-auth"]
+}
+```
+
+**É isso!** O OpenCode instalará o plugin automaticamente ao iniciar.
+
+### Métodos alternativos de instalação
+
+#### Via npm (versão explícita)
+```json
+{
+  "plugin": ["opencode-qwencode-auth@latest"]
+}
+```
+
+#### Via repositório Git
+```json
+{
+  "plugin": ["opencode-qwencode-auth@git+https://github.com/gustavodiasdev/opencode-qwencode-auth.git#main"]
+}
+```
+
+#### Versão específica
+```json
+{
+  "plugin": ["opencode-qwencode-auth@1.3.0"]
 }
 ```
 
