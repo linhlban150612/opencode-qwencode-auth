@@ -317,15 +317,19 @@ export const QwenAuthPlugin = async (_input: unknown) => {
     },
 
     config: async (config: Record<string, unknown>) => {
+      debugLogger.info('config() called - registering provider and models');
+      
       const providers = (config.provider as Record<string, unknown>) || {};
 
-        providers[QWEN_PROVIDER_ID] = {
-          npm: '@ai-sdk/openai-compatible',
-          name: 'Qwen Code',
-          options: { 
-            baseURL: QWEN_API_CONFIG.baseUrl,
-            headers: getQwenHeaders()
-          },
+      debugLogger.info('config() - registering provider', { providerID: QWEN_PROVIDER_ID });
+      
+      providers[QWEN_PROVIDER_ID] = {
+        npm: '@ai-sdk/openai-compatible',
+        name: 'Qwen Code',
+        options: { 
+          baseURL: QWEN_API_CONFIG.baseUrl,
+          headers: getQwenHeaders()
+        },
         models: Object.fromEntries(
           Object.entries(QWEN_MODELS).map(([id, m]) => {
             const hasVision = 'capabilities' in m && m.capabilities?.vision;
@@ -346,6 +350,11 @@ export const QwenAuthPlugin = async (_input: unknown) => {
           })
         ),
       };
+
+      debugLogger.info('config() - provider registered successfully', { 
+        providerID: QWEN_PROVIDER_ID,
+        modelCount: Object.keys(QWEN_MODELS).length 
+      });
 
       config.provider = providers;
     },
