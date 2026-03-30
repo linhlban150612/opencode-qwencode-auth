@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Fixed provider reload after authentication** - Loader now always returns a valid configuration instead of returning `null` when credentials are unavailable
   - Provider models now appear immediately after `/connect` without requiring restart
+  - Added 3-second polling in loader to wait for OAuth callback completion (fixes race condition)
   - First request may trigger 401, but automatic recovery fetches fresh credentials transparently
   - Works for both first-time authentication and re-authentication scenarios
   - Leverages existing 401 recovery mechanism in fetch() for seamless auth on-demand

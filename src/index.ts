@@ -101,7 +101,24 @@ export const QwenAuthPlugin = async (_input: unknown) => {
         }
 
         // Get latest valid credentials
-        const credentials = await tokenManager.getValidCredentials();
+        let credentials = await tokenManager.getValidCredentials();
+
+        // POLLING: Se não tem credenciais, esperar OAuth completar (race condition fix)
+        // Isso resolve o problema do /connect onde o loader pode ser chamado DURANTE o polling do OAuth
+        if (!credentials?.accessToken) {
+          debugLogger.info('No credentials found, polling for OAuth completion...');
+          for (let i = 0; i < 6; i++) {  // Esperar até 3 segundos (6 x 500ms)
+            await new Promise(resolve => setTimeout(resolve, 500));
+            credentials = await tokenManager.getValidCredentials();
+            if (credentials?.accessToken) {
+              debugLogger.info('OAuth completed during loader polling', {
+                attempt: i + 1,
+                elapsed: (i + 1) * 500
+              });
+              break;
+            }
+          }
+        }
 
         // SEMPRE retornar config, mesmo sem token
         // O fetch já tem 401 recovery embutido que busca credenciais atualizadas
@@ -111,7 +128,8 @@ export const QwenAuthPlugin = async (_input: unknown) => {
         debugLogger.info('Loader called', {
           hasToken,
           baseURL,
-          expiryDate: credentials?.expiryDate ? new Date(credentials.expiryDate).toISOString() : 'N/A'
+          expiryDate: credentials?.expiryDate ? new Date(credentials.expiryDate).toISOString() : 'N/A',
+          pollingAttempts: credentials?.accessToken ? 'completed' : 'timeout'
         });
 
         return {
