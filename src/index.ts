@@ -93,6 +93,9 @@ export const QwenAuthPlugin = async (_input: unknown) => {
         getAuth: any,
         provider: { models?: Record<string, { cost?: { input: number; output: number } }> },
       ) => {
+        const loaderTime = Date.now();
+        debugLogger.info('loader() called', { timestamp: loaderTime });
+        
         // Zerar custo dos modelos (gratuito via OAuth)
         if (provider?.models) {
           for (const model of Object.values(provider.models)) {
@@ -125,11 +128,13 @@ export const QwenAuthPlugin = async (_input: unknown) => {
         const hasToken = !!credentials?.accessToken;
         const baseURL = resolveBaseUrl(credentials?.resourceUrl);
 
-        debugLogger.info('Loader called', {
+        debugLogger.info('loader() - credentials loaded', {
           hasToken,
           baseURL,
           expiryDate: credentials?.expiryDate ? new Date(credentials.expiryDate).toISOString() : 'N/A',
-          pollingAttempts: credentials?.accessToken ? 'completed' : 'timeout'
+          pollingAttempts: credentials?.accessToken ? 'completed' : 'timeout',
+          timestamp: Date.now(),
+          duration: Date.now() - loaderTime
         });
 
         return {
@@ -317,11 +322,16 @@ export const QwenAuthPlugin = async (_input: unknown) => {
     },
 
     config: async (config: Record<string, unknown>) => {
-      debugLogger.info('config() called - registering provider and models');
+      const configTime = Date.now();
+      debugLogger.info('config() called - registering provider and models', { timestamp: configTime });
       
       const providers = (config.provider as Record<string, unknown>) || {};
 
-      debugLogger.info('config() - registering provider', { providerID: QWEN_PROVIDER_ID });
+      debugLogger.info('config() - registering provider', { 
+        providerID: QWEN_PROVIDER_ID,
+        timestamp: configTime,
+        existingProviders: Object.keys(providers)
+      });
       
       providers[QWEN_PROVIDER_ID] = {
         npm: '@ai-sdk/openai-compatible',
@@ -353,10 +363,18 @@ export const QwenAuthPlugin = async (_input: unknown) => {
 
       debugLogger.info('config() - provider registered successfully', { 
         providerID: QWEN_PROVIDER_ID,
-        modelCount: Object.keys(QWEN_MODELS).length 
+        modelCount: Object.keys(QWEN_MODELS).length,
+        timestamp: Date.now(),
+        duration: Date.now() - configTime,
+        allProviders: Object.keys(providers)
       });
 
       config.provider = providers;
+      
+      debugLogger.info('config() - config.provider updated', {
+        timestamp: Date.now(),
+        totalProviders: Object.keys(config.provider as Record<string, unknown>).length
+      });
     },
   };
 };
