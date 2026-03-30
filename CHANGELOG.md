@@ -9,7 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🚨 Critical Fixes
 
-- **Fixed provider reload after authentication** - Loader now always returns a valid configuration instead of returning `null` when credentials are unavailable
+- **Fixed provider reload after authentication** - Complete fix for provider disappearing after `/connect`
+  - **Root cause**: OpenCode filters providers based on its own auth system (`Auth.get()`), not plugin's tokenManager
+  - **Solution**: Call `client.auth.set()` in OAuth callback to save credentials to OpenCode auth system
   - Provider models now appear immediately after `/connect` without requiring restart
   - Added 3-second polling in loader to wait for OAuth callback completion (fixes race condition)
   - First request may trigger 401, but automatic recovery fetches fresh credentials transparently
