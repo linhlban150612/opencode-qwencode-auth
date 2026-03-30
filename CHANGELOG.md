@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🚨 Critical Fixes
+
+- **Fixed provider reload after authentication** - Loader now always returns a valid configuration instead of returning `null` when credentials are unavailable
+  - Provider models now appear immediately after `/connect` without requiring restart
+  - First request may trigger 401, but automatic recovery fetches fresh credentials transparently
+  - Works for both first-time authentication and re-authentication scenarios
+  - Leverages existing 401 recovery mechanism in fetch() for seamless auth on-demand
+
 ### 🔧 Fixes
 
 - **Dynamic User-Agent detection** - User-Agent header now dynamically detects platform and architecture instead of hardcoded Linux/x64

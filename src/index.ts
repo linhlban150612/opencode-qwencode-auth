@@ -102,12 +102,20 @@ export const QwenAuthPlugin = async (_input: unknown) => {
 
         // Get latest valid credentials
         const credentials = await tokenManager.getValidCredentials();
-        if (!credentials?.accessToken) return null;
 
-        const baseURL = resolveBaseUrl(credentials.resourceUrl);
+        // SEMPRE retornar config, mesmo sem token
+        // O fetch já tem 401 recovery embutido que busca credenciais atualizadas
+        const hasToken = !!credentials?.accessToken;
+        const baseURL = resolveBaseUrl(credentials?.resourceUrl);
+
+        debugLogger.info('Loader called', {
+          hasToken,
+          baseURL,
+          expiryDate: credentials?.expiryDate ? new Date(credentials.expiryDate).toISOString() : 'N/A'
+        });
 
         return {
-          apiKey: credentials.accessToken,
+          apiKey: credentials?.accessToken || 'pending-auth',
           baseURL: baseURL,
           headers: {
             ...getQwenHeaders(),
