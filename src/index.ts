@@ -84,7 +84,9 @@ function isAuthError(error: unknown): boolean {
 // Plugin Principal
 // ============================================
 
-export const QwenAuthPlugin = async (_input: unknown) => {
+export const QwenAuthPlugin = async (input: any) => {
+  const client = input?.client;
+  
   return {
     auth: {
       provider: QWEN_PROVIDER_ID,
@@ -287,6 +289,25 @@ export const QwenAuthPlugin = async (_input: unknown) => {
                       if (tokenResponse) {
                         const credentials = tokenResponseToCredentials(tokenResponse);
                         tokenManager.setCredentials(credentials);
+
+                        // SALVAR CREDENCIAIS NO OPENCODE TAMBÉM
+                        // Isso faz o provider aparecer na UI sem precisar de restart
+                        if (client?.auth?.set) {
+                          try {
+                            await client.auth.set({
+                              providerID: QWEN_PROVIDER_ID,
+                              auth: { 
+                                type: "oauth",
+                                access: credentials.accessToken,
+                                refresh: credentials.refreshToken ?? '',
+                                expires: credentials.expiryDate || Date.now() + 3600000
+                              }
+                            });
+                            debugLogger.info('Credentials saved to OpenCode auth system');
+                          } catch (authError) {
+                            debugLogger.error('Failed to save credentials to OpenCode auth', authError);
+                          }
+                        }
 
                         return {
                           type: 'success' as const,
