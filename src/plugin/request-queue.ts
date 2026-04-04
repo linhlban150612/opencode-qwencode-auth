@@ -1,7 +1,7 @@
 /**
  * Request Queue with throttling
  * Prevents hitting rate limits by controlling request frequency
- * Inspired by qwen-code-0.12.0 throttling patterns
+ * Inspired by qwen-code-0.14.0 throttling patterns
  */
 
 import { createDebugLogger } from '../utils/debug-logger.js';

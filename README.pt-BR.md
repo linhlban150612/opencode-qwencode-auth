@@ -8,7 +8,7 @@
   <img src="assets/screenshot.png" alt="OpenCode com Qwen Code" width="800">
 </p>
 
-**Autentique o OpenCode CLI com sua conta qwen.ai.** Este plugin permite usar o modelo `coder-model` com **1.000 requisições gratuitas por dia** - sem API key ou cartão de crédito!
+**Autentique o OpenCode CLI com sua conta qwen.ai.** Este plugin permite usar o modelo `coder-model` com **1.000 requisições gratuitas por dia** — powered by Qwen 3.6 Plus com suporte a vídeo e visão. Sem API key ou cartão de crédito!
 
 [🇺🇸 Read in English](./README.md) | [📜 Changelog](./CHANGELOG.md)
 
@@ -93,11 +93,9 @@ Selecione **"Qwen Code (qwen.ai OAuth)"**.
 
 | Modelo | Contexto | Max Output | Recursos |
 |--------|----------|------------|----------|
-| `coder-model` | 1M tokens | Até 64K tokens¹ | Alias oficial (Auto-rotas para Qwen 3.5 Plus - Híbrido & Visão) |
+| `coder-model` | 1M tokens | Até 64K tokens | Qwen 3.6 Plus — suporte a vídeo e visão |
 
-> ¹ O output máximo real pode variar dependendo do modelo específico para o qual `coder-model` é rotacionado.
-
-> **Nota:** Este plugin está alinhado com o cliente oficial `qwen-code`. O alias `coder-model` rotaciona automaticamente para o melhor modelo Qwen 3.5 Plus disponível com raciocínio híbrido e capacidades de visão.
+> **Nota:** Este plugin está alinhado com o cliente oficial `qwen-code`. O alias `coder-model` mapeia para o Qwen 3.6 Plus com raciocínio híbrido, visão e suporte a entrada de vídeo.
 
 ### Usando o modelo
 

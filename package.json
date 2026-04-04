@@ -1,7 +1,7 @@
 {
   "name": "opencode-qwencode-auth",
   "version": "1.5.0",
-  "description": "Qwen OAuth authentication plugin for OpenCode - Access Qwen AI models (Coder, Vision) with your qwen.ai account - Fixes rate limiting (Issue #4)",
+  "description": "Qwen OAuth authentication plugin for OpenCode - Access Qwen 3.6 Plus (coder-model) with video support via qwen.ai account",
   "module": "index.ts",
   "type": "module",
   "scripts": {
@@ -18,10 +18,9 @@
     "opencode",
     "qwen",
     "qwen-code",
-    "qwen3-coder",
-    "qwen3-vl-plus",
-    "qwen3.5-plus",
-    "vision-model",
+    "qwen3.6-plus",
+    "coder-model",
+    "video",
     "oauth",
     "authentication",
     "ai",

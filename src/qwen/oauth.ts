@@ -13,8 +13,8 @@ import { QwenAuthError, CredentialsClearRequiredError, logTechnicalDetail } from
 import { retryWithBackoff, getErrorStatus } from '../utils/retry.js';
 
 /**
- * Erro lançado quando o servidor pede slow_down (RFC 8628)
- * O caller deve aumentar o intervalo de polling
+ * Error thrown when the server requests slow_down (RFC 8628)
+ * The caller should increase the polling interval
  */
 export class SlowDownError extends Error {
   constructor() {

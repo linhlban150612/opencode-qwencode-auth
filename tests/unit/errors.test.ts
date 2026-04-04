@@ -18,26 +18,26 @@ describe('QwenAuthError', () => {
     const error = new QwenAuthError('token_expired');
     expect(error.name).toBe('QwenAuthError');
     expect(error.kind).toBe('token_expired');
-    expect(error.message).toContain('Token expirado');
+    expect(error.message).toContain('Token expired');
     expect(error.message).toContain('opencode auth login');
   });
 
   it('should create refresh_failed error with correct message', () => {
     const error = new QwenAuthError('refresh_failed');
     expect(error.kind).toBe('refresh_failed');
-    expect(error.message).toContain('Falha ao renovar token');
+    expect(error.message).toContain('Failed to renew token');
   });
 
   it('should create auth_required error with correct message', () => {
     const error = new QwenAuthError('auth_required');
     expect(error.kind).toBe('auth_required');
-    expect(error.message).toContain('Autenticacao necessaria');
+    expect(error.message).toContain('Authentication required');
   });
 
   it('should create credentials_clear_required error with correct message', () => {
     const error = new QwenAuthError('credentials_clear_required');
     expect(error.kind).toBe('credentials_clear_required');
-    expect(error.message).toContain('Credenciais invalidas');
+    expect(error.message).toContain('Invalid or revoked credentials');
   });
 
   it('should store technical detail when provided', () => {
@@ -64,7 +64,7 @@ describe('QwenApiError', () => {
   it('should classify 401 as unauthorized', () => {
     const error = new QwenApiError(401);
     expect(error.kind).toBe('unauthorized');
-    expect(error.message).toContain('Token invalido ou expirado');
+    expect(error.message).toContain('Invalid or expired token');
   });
 
   it('should classify 403 as unauthorized', () => {
@@ -75,13 +75,13 @@ describe('QwenApiError', () => {
   it('should classify 429 as rate_limit', () => {
     const error = new QwenApiError(429);
     expect(error.kind).toBe('rate_limit');
-    expect(error.message).toContain('Limite de requisicoes atingido');
+    expect(error.message).toContain('Rate limit reached');
   });
 
   it('should classify 500 as server_error', () => {
     const error = new QwenApiError(500);
     expect(error.kind).toBe('server_error');
-    expect(error.message).toContain('Servidor Qwen indisponivel');
+    expect(error.message).toContain('Qwen server unavailable');
   });
 
   it('should classify 503 as server_error', () => {
@@ -104,7 +104,7 @@ describe('QwenNetworkError', () => {
   it('should create network error with correct message', () => {
     const error = new QwenNetworkError('fetch failed');
     expect(error.name).toBe('QwenNetworkError');
-    expect(error.message).toContain('Erro de rede');
+    expect(error.message).toContain('Network error');
     expect(error.message).toContain('fetch failed');
   });
 

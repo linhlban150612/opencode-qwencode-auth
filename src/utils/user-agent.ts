@@ -4,7 +4,7 @@
  * Emulates the official qwen-code CLI User-Agent format:
  * QwenCode/{version} ({platform}; {arch})
  * 
- * Example: QwenCode/0.12.0 (Linux; x64)
+ * Example: QwenCode/0.14.0 (Linux; x64)
  */
 
 import { getPlatformInfo } from './platform.js';
@@ -13,7 +13,7 @@ import { getPlatformInfo } from './platform.js';
  * Version of the official qwen-code client that we're emulating.
  * Update this when the official client updates to a new version.
  */
-const QWEN_CODE_VERSION = '0.12.0';
+const QWEN_CODE_VERSION = '0.14.0';
 
 /**
  * Generate User-Agent string with dynamic platform detection
