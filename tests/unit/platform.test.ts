@@ -32,9 +32,9 @@ describe('User-Agent Generation', () => {
     expect(userAgent).toMatch(/^QwenCode\/\d+\.\d+\.\d+ \(.+; .+\)$/);
   });
 
-  test('should include version 0.12.0', () => {
+  test('should include version 0.14.0', () => {
     const userAgent = generateUserAgent();
-    expect(userAgent).toContain('QwenCode/0.12.0');
+    expect(userAgent).toContain('QwenCode/0.14.0');
   });
 
   test('should include detected platform', () => {

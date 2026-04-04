@@ -1,5 +1,5 @@
 /**
- * Retry utilities inspired by qwen-code-0.12.0
+ * Retry utilities inspired by qwen-code-0.14.0
  * Based on: packages/core/src/utils/retry.ts
  */
 

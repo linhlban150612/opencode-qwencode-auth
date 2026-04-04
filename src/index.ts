@@ -1,11 +1,11 @@
 /**
  * OpenCode Qwen Auth Plugin
  *
- * Plugin de autenticacao OAuth para Qwen, baseado no qwen-code.
- * Implementa Device Flow (RFC 8628) para autenticacao.
+ * OAuth authentication plugin for Qwen, based on qwen-code.
+ * Implements Device Flow (RFC 8628) for authentication.
  *
  * Provider: qwen-code -> portal.qwen.ai/v1
- * Modelos: qwen3-coder-plus, qwen3-coder-flash, coder-model, vision-model
+ * Models: coder-model (Qwen 3.6 Plus with video)
  */
 
 import { spawn } from 'node:child_process';
@@ -46,38 +46,10 @@ function openBrowser(url: string): void {
     const child = spawn(command, args, { stdio: 'ignore', detached: true });
     child.unref?.();
   } catch {
-    // Fallback: show URL in stderr
     console.error('\n[Qwen Auth] Unable to open browser automatically.');
     console.error('Please open this URL manually to authenticate:\n');
     console.error(`  ${url}\n`);
   }
-}
-
-/**
- * Check if error is authentication-related (401, 403, token expired)
- * Mirrors official client's isAuthError logic
- */
-function isAuthError(error: unknown): boolean {
-  if (!error) return false;
-
-  const errorMessage = error instanceof Error
-    ? error.message.toLowerCase()
-    : String(error).toLowerCase();
-
-  const status = getErrorStatus(error);
-
-  return (
-    status === 401 ||
-    status === 403 ||
-    errorMessage.includes('unauthorized') ||
-    errorMessage.includes('forbidden') ||
-    errorMessage.includes('invalid access token') ||
-    errorMessage.includes('invalid api key') ||
-    errorMessage.includes('token expired') ||
-    errorMessage.includes('authentication') ||
-    errorMessage.includes('access denied') ||
-    (errorMessage.includes('token') && errorMessage.includes('expired'))
-  );
 }
 
 // ============================================
@@ -95,10 +67,7 @@ export const QwenAuthPlugin = async (input: any) => {
         getAuth: any,
         provider: { models?: Record<string, { cost?: { input: number; output: number } }> },
       ) => {
-        const loaderTime = Date.now();
-        debugLogger.info('loader() called', { timestamp: loaderTime });
-        
-        // Zerar custo dos modelos (gratuito via OAuth)
+        // Zero model costs (free via OAuth)
         if (provider?.models) {
           for (const model of Object.values(provider.models)) {
             if (model) model.cost = { input: 0, output: 0 };
@@ -108,11 +77,11 @@ export const QwenAuthPlugin = async (input: any) => {
         // Get latest valid credentials
         let credentials = await tokenManager.getValidCredentials();
 
-        // POLLING: Se não tem credenciais, esperar OAuth completar (race condition fix)
-        // Isso resolve o problema do /connect onde o loader pode ser chamado DURANTE o polling do OAuth
+        // POLLING: No credentials yet, wait for OAuth to complete (race condition fix)
+        // This resolves the /connect issue where the loader may be called DURING OAuth polling
         if (!credentials?.accessToken) {
           debugLogger.info('No credentials found, polling for OAuth completion...');
-          for (let i = 0; i < 6; i++) {  // Esperar até 3 segundos (6 x 500ms)
+          for (let i = 0; i < 6; i++) {
             await new Promise(resolve => setTimeout(resolve, 500));
             credentials = await tokenManager.getValidCredentials();
             if (credentials?.accessToken) {
@@ -125,23 +94,11 @@ export const QwenAuthPlugin = async (input: any) => {
           }
         }
 
-        // SEMPRE retornar config, mesmo sem token
-        // O fetch já tem 401 recovery embutido que busca credenciais atualizadas
-        const hasToken = !!credentials?.accessToken;
         const baseURL = resolveBaseUrl(credentials?.resourceUrl);
-
-        debugLogger.info('loader() - credentials loaded', {
-          hasToken,
-          baseURL,
-          expiryDate: credentials?.expiryDate ? new Date(credentials.expiryDate).toISOString() : 'N/A',
-          pollingAttempts: credentials?.accessToken ? 'completed' : 'timeout',
-          timestamp: Date.now(),
-          duration: Date.now() - loaderTime
-        });
 
         return {
           apiKey: credentials?.accessToken || 'pending-auth',
-          baseURL: baseURL,
+          baseURL,
           headers: {
             ...getQwenHeaders(),
           },
@@ -184,10 +141,6 @@ export const QwenAuthPlugin = async (input: any) => {
                 // Force our Authorization token
                 mergedHeaders['Authorization'] = `Bearer ${token}`;
 
-                // Optional: X-Metadata might be expected by some endpoints for free quota tracking
-                // but let's try without it first to match official client closer
-                // mergedHeaders['X-Metadata'] = JSON.stringify({ ... });
-
                 // Perform the request
                 const response = await fetch(url, {
                   ...options,
@@ -197,28 +150,13 @@ export const QwenAuthPlugin = async (input: any) => {
                 // Reactive recovery for 401 (token expired mid-session)
                 if (response.status === 401 && authRetryCount < 1) {
                   authRetryCount++;
-                  debugLogger.warn('401 Unauthorized detected. Forcing token refresh...', {
-                    url: url.substring(0, 100) + (url.length > 100 ? '...' : ''),
-                    attempt: authRetryCount,
-                    maxRetries: 1
-                  });
+                  debugLogger.warn('401 detected, forcing token refresh...');
                   
-                  // Force refresh from API
-                  const refreshStart = Date.now();
                   const refreshed = await tokenManager.getValidCredentials(true);
-                  const refreshElapsed = Date.now() - refreshStart;
                   
                   if (refreshed?.accessToken) {
-                    debugLogger.info('Token refreshed successfully, retrying request...', {
-                      refreshElapsed,
-                      newTokenExpiry: refreshed.expiryDate ? new Date(refreshed.expiryDate).toISOString() : 'N/A'
-                    });
-                    return executeRequest(); // Recursive retry with new token
-                  } else {
-                    debugLogger.error('Failed to refresh token after 401', {
-                      refreshElapsed,
-                      hasRefreshToken: !!refreshed?.accessToken
-                    });
+                    debugLogger.info('Token refreshed, retrying request');
+                    return executeRequest();
                   }
                 }
 
@@ -227,30 +165,19 @@ export const QwenAuthPlugin = async (input: any) => {
                   const errorText = await response.text().catch(() => '');
                   const error: any = new Error(`HTTP ${response.status}: ${errorText}`);
                   error.status = response.status;
-                  
-                  // Add context for debugging
-                  debugLogger.error('Request failed', {
-                    status: response.status,
-                    statusText: response.statusText,
-                    url: url.substring(0, 100) + (url.length > 100 ? '...' : ''),
-                    method: options?.method || 'GET',
-                    errorText: errorText.substring(0, 200) + (errorText.length > 200 ? '...' : '')
-                  });
-                  
                   throw error;
                 }
 
                 return response;
               };
 
-              // Use official retry logic for 429/5xx errors
+              // Use retryWithBackoff for 429/5xx errors (401 is handled by executeRequest)
               return retryWithBackoff(() => executeRequest(), {
                 authType: 'qwen-oauth',
                 maxAttempts: 7,
                 shouldRetryOnError: (error: any) => {
                   const status = error.status || getErrorStatus(error);
-                  // Retry on 401 (handled by executeRequest recursion too), 429, and 5xx
-                  return status === 401 || status === 429 || (status !== undefined && status >= 500 && status < 600);
+                  return status === 429 || (status !== undefined && status >= 500 && status < 600);
                 }
               });
             });
@@ -273,7 +200,7 @@ export const QwenAuthPlugin = async (input: any) => {
 
               return {
                 url: deviceAuth.verification_uri_complete,
-                instructions: `Codigo: ${deviceAuth.user_code}`,
+                instructions: `Code: ${deviceAuth.user_code}`,
                 method: 'auto' as const,
                 callback: async () => {
                   const startTime = Date.now();
@@ -290,8 +217,7 @@ export const QwenAuthPlugin = async (input: any) => {
                         const credentials = tokenResponseToCredentials(tokenResponse);
                         tokenManager.setCredentials(credentials);
 
-                        // SALVAR CREDENCIAIS NO OPENCODE TAMBÉM
-                        // Isso faz o provider aparecer na UI sem precisar de restart
+                        // Save credentials to OpenCode auth system so provider appears in UI without restart
                         if (client?.auth?.set) {
                           try {
                             await client.auth.set({
@@ -303,7 +229,6 @@ export const QwenAuthPlugin = async (input: any) => {
                                 expires: credentials.expiryDate || Date.now() + 3600000
                               }
                             });
-                            debugLogger.info('Credentials saved to OpenCode auth system');
                           } catch (authError) {
                             debugLogger.error('Failed to save credentials to OpenCode auth', authError);
                           }
@@ -329,10 +254,10 @@ export const QwenAuthPlugin = async (input: any) => {
                 },
               };
             } catch (e) {
-              const msg = e instanceof Error ? e.message : 'Erro desconhecido';
+              const msg = e instanceof Error ? e.message : 'Unknown error';
               return {
                 url: '',
-                instructions: `Erro: ${msg}`,
+                instructions: `Error: ${msg}`,
                 method: 'auto' as const,
                 callback: async () => ({ type: 'failed' as const }),
               };
@@ -343,16 +268,7 @@ export const QwenAuthPlugin = async (input: any) => {
     },
 
     config: async (config: Record<string, unknown>) => {
-      const configTime = Date.now();
-      debugLogger.info('config() called - registering provider and models', { timestamp: configTime });
-      
       const providers = (config.provider as Record<string, unknown>) || {};
-
-      debugLogger.info('config() - registering provider', { 
-        providerID: QWEN_PROVIDER_ID,
-        timestamp: configTime,
-        existingProviders: Object.keys(providers)
-      });
       
       providers[QWEN_PROVIDER_ID] = {
         npm: '@ai-sdk/openai-compatible',
@@ -363,7 +279,10 @@ export const QwenAuthPlugin = async (input: any) => {
         },
         models: Object.fromEntries(
           Object.entries(QWEN_MODELS).map(([id, m]) => {
-            const hasVision = 'capabilities' in m && m.capabilities?.vision;
+            const caps = 'capabilities' in m ? m.capabilities : {};
+            const inputModalities = ['text'];
+            if (caps?.vision) inputModalities.push('image');
+            if (caps?.video) inputModalities.push('video');
             return [
               id,
               {
@@ -373,7 +292,7 @@ export const QwenAuthPlugin = async (input: any) => {
                 limit: { context: m.contextWindow, output: m.maxOutput },
                 cost: m.cost,
                 modalities: { 
-                  input: hasVision ? ['text', 'image'] : ['text'], 
+                  input: inputModalities, 
                   output: ['text'] 
                 },
               },
@@ -382,20 +301,7 @@ export const QwenAuthPlugin = async (input: any) => {
         ),
       };
 
-      debugLogger.info('config() - provider registered successfully', { 
-        providerID: QWEN_PROVIDER_ID,
-        modelCount: Object.keys(QWEN_MODELS).length,
-        timestamp: Date.now(),
-        duration: Date.now() - configTime,
-        allProviders: Object.keys(providers)
-      });
-
       config.provider = providers;
-      
-      debugLogger.info('config() - config.provider updated', {
-        timestamp: Date.now(),
-        totalProviders: Object.keys(config.provider as Record<string, unknown>).length
-      });
     },
   };
 };

@@ -1,12 +1,12 @@
 /**
- * Erros customizados do plugin Qwen Auth
+ * Custom errors for the Qwen Auth plugin
  *
- * Fornece mensagens amigáveis para o usuário em vez de JSON bruto da API.
- * Detalhes técnicos só aparecem com OPENCODE_QWEN_DEBUG=1.
+ * Provides user-friendly messages instead of raw API JSON.
+ * Technical details only appear when OPENCODE_QWEN_DEBUG=1.
  */
 
 const REAUTH_HINT =
-  'Execute "opencode auth login" e selecione "Qwen Code (qwen.ai OAuth)" para autenticar.';
+  'Run "opencode auth login" and select "Qwen Code (qwen.ai OAuth)" to authenticate.';
 
 // ============================================
 // Token Manager Error Types
@@ -26,16 +26,16 @@ export enum TokenError {
 }
 
 // ============================================
-// Erro de Autenticação
+// Authentication Errors
 // ============================================
 
 export type AuthErrorKind = 'token_expired' | 'refresh_failed' | 'auth_required' | 'credentials_clear_required';
 
 const AUTH_MESSAGES: Record<AuthErrorKind, string> = {
-  token_expired: `[Qwen] Token expirado. ${REAUTH_HINT}`,
-  refresh_failed: `[Qwen] Falha ao renovar token. ${REAUTH_HINT}`,
-  auth_required: `[Qwen] Autenticacao necessaria. ${REAUTH_HINT}`,
-  credentials_clear_required: `[Qwen] Credenciais invalidas ou revogadas. ${REAUTH_HINT}`,
+  token_expired: `[Qwen] Token expired. ${REAUTH_HINT}`,
+  refresh_failed: `[Qwen] Failed to renew token. ${REAUTH_HINT}`,
+  auth_required: `[Qwen] Authentication required. ${REAUTH_HINT}`,
+  credentials_clear_required: `[Qwen] Invalid or revoked credentials. ${REAUTH_HINT}`,
 };
 
 export class QwenAuthError extends Error {
@@ -51,8 +51,8 @@ export class QwenAuthError extends Error {
 }
 
 /**
- * Erro especial que sinaliza necessidade de limpar credenciais em cache.
- * Ocorre quando refresh token é revogado (invalid_grant).
+ * Special error signaling that cached credentials should be cleared.
+ * Thrown when refresh token is revoked (invalid_grant).
  */
 export class CredentialsClearRequiredError extends QwenAuthError {
   constructor(technicalDetail?: string) {
@@ -78,7 +78,7 @@ export class TokenManagerError extends Error {
 }
 
 // ============================================
-// Erro de API
+// Authentication Errors
 // ============================================
 
 /**
@@ -95,24 +95,24 @@ export type ApiErrorKind =
 function classifyApiStatus(statusCode: number): { message: string; kind: ApiErrorKind } {
   if (statusCode === 401 || statusCode === 403) {
     return {
-      message: `[Qwen] Token invalido ou expirado. ${REAUTH_HINT}`,
+      message: `[Qwen] Invalid or expired token. ${REAUTH_HINT}`,
       kind: 'unauthorized'
     };
   }
   if (statusCode === 429) {
     return {
-      message: '[Qwen] Limite de requisicoes atingido. Aguarde alguns minutos antes de tentar novamente.',
+      message: '[Qwen] Rate limit reached. Wait a few minutes before trying again.',
       kind: 'rate_limit'
     };
   }
   if (statusCode >= 500) {
     return {
-      message: `[Qwen] Servidor Qwen indisponivel (erro ${statusCode}). Tente novamente em alguns minutos.`,
+      message: `[Qwen] Qwen server unavailable (error ${statusCode}). Try again in a few minutes.`,
       kind: 'server_error'
     };
   }
   return {
-    message: `[Qwen] Erro na API Qwen (${statusCode}). Verifique sua conexao e tente novamente.`,
+    message: `[Qwen] Qwen API error (${statusCode}). Check your connection and try again.`,
     kind: 'unknown'
   };
 }
@@ -139,18 +139,18 @@ export class QwenNetworkError extends Error {
   public readonly technicalDetail?: string;
 
   constructor(message: string, technicalDetail?: string) {
-    super(`[Qwen] Erro de rede: ${message}`);
+    super(`[Qwen] Network error: ${message}`);
     this.name = 'QwenNetworkError';
     this.technicalDetail = technicalDetail;
   }
 }
 
 // ============================================
-// Helper de log condicional
+// Conditional logging helper
 // ============================================
 
 /**
- * Loga detalhes técnicos apenas quando debug está ativo.
+ * Logs technical details only when debug is active.
  */
 export function logTechnicalDetail(detail: string): void {
   if (process.env.OPENCODE_QWEN_DEBUG === '1') {
